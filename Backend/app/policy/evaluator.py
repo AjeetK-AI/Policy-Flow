@@ -39,6 +39,9 @@ def evaluate_condition(condition, facts):
 
 
 def evaluate_rule(rule, facts):
+    if getattr(rule, "requires_review", False):
+        return False
+
     for condition in rule.conditions:
         if not evaluate_condition(condition, facts):
             return False

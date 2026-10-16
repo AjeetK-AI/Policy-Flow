@@ -1061,13 +1061,14 @@ const updatePolicyVersion = async (policy: Policy, action: "activate" | "rollbac
   <div className="auth-box">
     <p className="auth-caption">YOUR WORKSPACE</p>
 
+    
     <div className="auth-actions">
       {!auth.signedIn ? (
         <>
           <button
             type="button"
             onClick={() => {
-              window.location.href = "/sign-in";
+              window.location.href = "/login?next=%2F%3Fpage%3DPolicies";
             }}
           >
             <LockKeyhole size={13} />
@@ -1077,7 +1078,7 @@ const updatePolicyVersion = async (policy: Policy, action: "activate" | "rollbac
           <button
             type="button"
             onClick={() => {
-              window.location.href = "/sign-up";
+              window.location.href = "/signup?next=%2F%3Fpage%3DPolicies";
             }}
           >
             <Plus size={14} />
@@ -1085,7 +1086,20 @@ const updatePolicyVersion = async (policy: Policy, action: "activate" | "rollbac
           </button>
         </>
       ) : (
-        <p className="auth-not-configured">Signed in</p>
+        <>
+          <p className="auth-not-configured">
+            Signed in as {auth.userName}
+          </p>
+          <button
+            type="button"
+            onClick={async () => {
+              await auth.logout();
+              window.location.href = "/";
+            }}
+          >
+            Sign out
+          </button>
+        </>
       )}
     </div>
   </div>
@@ -1191,38 +1205,66 @@ const updatePolicyVersion = async (policy: Policy, action: "activate" | "rollbac
                   >
                     <GitBranch size={14} />Sync with Git
                   </button>
+                  
                   <div className="upload-control policies-upload-control">
-                    <label
-                      className={`primary-button upload-button policies-upload-button ${
-                        uploading || !auth.configured || !auth.signedIn ? "disabled" : ""
-                      } ${uploadStatus === "uploaded" ? "upload-success" : ""}`}
-                    >
-                      <Upload size={15} />
-                      {!auth.configured || !auth.signedIn
-                        ? "Sign in to upload"
-                        : uploading
+                    {!auth.signedIn ? (
+                      <button
+                        type="button"
+                        className="primary-button upload-button policies-upload-button"
+                        onClick={() => {
+                          window.location.href = "/login?next=%2F%3Fpage%3DPolicies";
+                        }}
+                      >
+                        <LockKeyhole size={15} />
+                        Sign in to upload
+                      </button>
+                    ) : (
+                      <label
+                        className={`primary-button upload-button policies-upload-button ${
+                          uploading ? "disabled" : ""
+                        } ${uploadStatus === "uploaded" ? "upload-success" : ""}`}
+                      >
+                        <Upload size={15} />
+                        {uploading
                           ? "Uploading PDF…"
                           : uploadStatus === "uploaded"
                             ? "Uploaded ✓"
                             : uploadStatus === "error"
                               ? "Retry upload"
                               : "Upload Policy"}
-                      <input
-                        type="file"
-                        accept="application/pdf,.pdf"
-                        disabled={uploading || !auth.configured || !auth.signedIn}
-                        onChange={uploadPolicy}
-                      />
-                    </label>
+                        <input
+                          type="file"
+                          accept="application/pdf,.pdf"
+                          disabled={uploading}
+                          onChange={uploadPolicy}
+                        />
+                      </label>
+                    )}
+
                     {uploading && (
-                      <div className="upload-progress" aria-label={`Sending PDF: ${uploadProgress}%`}>
-                        <div className="upload-progress-track" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={uploadProgress}>
-                          <span className={uploadProgress === 0 ? "indeterminate" : ""} style={{ width: `${uploadProgress}%` }} />
+                      <div
+                        className="upload-progress"
+                        aria-label={`Sending PDF: ${uploadProgress}%`}
+                      >
+                        <div
+                          className="upload-progress-track"
+                          role="progressbar"
+                          aria-valuemin={0}
+                          aria-valuemax={100}
+                          aria-valuenow={uploadProgress}
+                        >
+                          <span
+                            className={uploadProgress === 0 ? "indeterminate" : ""}
+                            style={{ width: `${uploadProgress}%` }}
+                          />
                         </div>
-                        <span className="upload-progress-percent">{uploadProgress === 0 ? "Sending" : `${uploadProgress}%`}</span>
+                        <span className="upload-progress-percent">
+                          {uploadProgress === 0 ? "Sending" : `${uploadProgress}%`}
+                        </span>
                       </div>
                     )}
                   </div>
+
                 </div>
               </section>
               <section className="parse-banner" aria-live="polite">
@@ -1402,7 +1444,7 @@ const updatePolicyVersion = async (policy: Policy, action: "activate" | "rollbac
               <div className="api-playground-layout">
                 <div className="screen-stack">
                   <section className="panel api-editor-panel">
-                    <div className="editor-tabs"><button className="editor-tab active"><Braces size={14} />Body (JSON)</button><span>Headers <i>1</i></span><span>Auth (Clerk session token)</span><code>application/json</code></div>
+                    <div className="editor-tabs"><button className="editor-tab active"><Braces size={14} />Body (JSON)</button><span>Headers <i>1</i></span><span>Auth (Bearer JWT)</span><code>application/json</code></div>
                     <form onSubmit={runApiRequest}><label className="sr-only" htmlFor="api-request-body">Request JSON</label><textarea id="api-request-body" spellCheck={false} value={apiRequestJson} onChange={(event) => setApiRequestJson(event.target.value)} /><div className="editor-footer"><span className="green-text">● JSON editor</span><span>{new Blob([apiRequestJson]).size} bytes</span><button type="button" className="small-button" onClick={() => setApiRequestJson(initialApiRequest)}>Revert to default</button><button type="submit" className="primary-button" disabled={apiRequestBusy}><ArrowRight size={14} />{apiRequestBusy ? "Sending…" : "Send request"}</button></div></form>
                   </section>
                   <section className="panel contract-panel"><div className="panel-heading"><h2><ShieldCheck size={15} />Runtime contract state</h2><span className="green-text mono">Connected configuration</span></div><div><span>Engine version</span><strong>v1.4.2</strong><span>API base URL</span><strong>{apiUrl.replace(/^https?:\/\//, "")}</strong></div></section>
@@ -1427,7 +1469,7 @@ const updatePolicyVersion = async (policy: Policy, action: "activate" | "rollbac
                     {settingsTab === "Environments & Routing" && <><form className="settings-form" onSubmit={saveApiUrl}><label>NEXT_PUBLIC_API_URL<input value={apiUrlDraft} onChange={(event) => setApiUrlDraft(event.target.value)} placeholder="http://localhost:8000" /></label><button className="primary-button" type="submit"><Check size={15} />Save connection</button></form><div className="setting-row"><div><strong>Active environment</strong><span>Switch the workspace environment label.</span></div><button className="meta-pill setting-toggle" onClick={() => setEnvironment(environment === "PROD" ? "DEV" : "PROD")}>{environment === "PROD" ? "Production" : "Development"} <ChevronDown size={14} /></button></div><div className="setting-row"><div><strong>API health check</strong><span>Automatically checks the backend every 30 seconds.</span></div><span className={`status-text ${apiStatus}`}>{apiStatus === "online" ? "Connected" : apiStatus === "checking" ? "Checking" : "Offline"}</span></div><button className="small-button" onClick={() => void checkApi(apiUrl)}><RefreshCw size={13} />Test connection</button></>}
                     {settingsTab === "Webhooks & Alerts" && <div className="settings-input-grid"><label>Manager approval webhook<input placeholder="https://hooks.example.com/manager" /></label><label>Fraud alert webhook<input placeholder="https://hooks.example.com/fraud" /></label><div className="setting-row"><div><strong>Delivery signing</strong><span>Sign webhook events with an HMAC secret.</span></div><span className="status-text">Enabled</span></div></div>}
                     {settingsTab === "Audit Ledger" && <div className="settings-ledger"><div><ShieldCheck size={18} /><span><strong>Immutable audit ledger</strong><small>Decision events are recorded with timestamps and evaluation metadata.</small></span><span className="status-text">Enabled</span></div><div><span>Retention period</span><strong>90 days</strong></div><div><span>Signature verification</span><strong className="green-text">Available</strong></div></div>}
-                    {settingsTab === "Account" && <div className="settings-ledger"><div><span><strong>Signed-in account</strong><small>{auth.userName ?? "Sign in to access your private policy workspace."}</small></span><span className="status-text">{auth.signedIn ? "Clerk" : "Sign in required"}</span></div><p className="trace-disclaimer">Policies, versions, activation history, and decision records are scoped to your signed-in account.</p></div>}
+                    {settingsTab === "Account" && <div className="settings-ledger"><div><span><strong>Signed-in account</strong><small>{auth.userName ?? "Sign in to access your private policy workspace."}</small></span><span className="status-text">{auth.signedIn ? "Backend Session" : "Sign in required"}</span></div><p className="trace-disclaimer">Policies, versions, activation history, and decision records are scoped to your signed-in account.</p></div>}
                   </section>
                   <section className="panel settings-card"><div className="panel-heading"><h2><Plug size={16} />Backend integration &amp; service layer</h2><span className={`live-label ${apiStatus}`}>{apiStatus === "online" ? "PROD CONNECTED" : "DEMO / OFFLINE"}</span></div><div className="integration-line"><code>NEXT_PUBLIC_API_URL</code><span>{apiUrl}</span><button className="small-button" onClick={() => void checkApi(apiUrl)}><RefreshCw size={13} />Test ping</button></div><div className="diagnostic-row"><span><i className={apiStatus === "online" ? "" : "muted"} />GET /health</span><strong className={apiStatus === "online" ? "good" : "muted-text"}>{apiStatus === "online" ? `HTTP 200 OK · ${apiLatency}ms` : "Waiting for connection"}</strong></div></section>
                 </div>

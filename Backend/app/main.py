@@ -11,7 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.auth import UserContext, get_current_user
+from app.auth import UserContext, auth_router, get_current_user
 from app.database.database import SessionLocal
 from app.database.models import (
     DecisionLogRecord,
@@ -36,11 +36,17 @@ app = FastAPI(
     version="1.01.2"
 )
 
+app.include_router(
+    auth_router,
+    prefix="/auth",
+    tags=["Authentication"],
+)
+
 frontend_origins = [
     origin.strip()
     for origin in os.getenv(
         "FRONTEND_ORIGINS",
-        "http://localhost:3000,http://127.0.0.1:3000",
+        "http://localhost:3000,http://127.0.0.1:3000,http://localhost:3001,http://127.0.0.1:3001",
     ).split(",")
     if origin.strip()
 ]
@@ -143,6 +149,9 @@ def _process_policy_upload(job_id: UUID) -> None:
                         reason=rule.reason,
                         priority=rule.priority,
                         source=rule.source or "",
+
+                        requires_review=rule.requires_review,
+                        review_notes=rule.review_notes,
                     )
                 )
             policy_record.pages = len(reader.pages)
@@ -215,6 +224,9 @@ def _policy_response(policy: PolicyRecord) -> dict:
                 "reason": rule.reason,
                 "priority": rule.priority,
                 "source": rule.source,
+
+                "requires_review": rule.requires_review,
+                "review_notes": rule.review_notes,
             }
             for rule in policy.rules
         ],
@@ -502,7 +514,28 @@ def _activate_policy_version(
             detail="Only successfully processed policy versions can be activated.",
         )
 
+    
     rule_records = list(target.rules)
+
+    rules_requiring_review = [
+        rule.rule_id
+        for rule in rule_records
+        if rule.requires_review
+    ]
+
+    if rules_requiring_review:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "message": (
+                    "Policy cannot be activated while rules "
+                    "require human review."
+                ),
+                "rule_ids": rules_requiring_review,
+            },
+        )
+
+    
     try:
         candidate_rules = [
             PolicyRule(
@@ -513,9 +546,12 @@ def _activate_policy_version(
                 reason=rule.reason,
                 priority=rule.priority,
                 source=rule.source,
+                requires_review=rule.requires_review,
+                review_notes=rule.review_notes,
             )
             for rule in rule_records
         ]
+
         validate_extracted_rules(
             [rule.rule_id for rule in candidate_rules],
             candidate_rules,

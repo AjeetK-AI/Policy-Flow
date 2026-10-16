@@ -167,6 +167,9 @@ class PolicyRuleRecord(Base):
     priority = Column(Integer, nullable=False, default=0)
     source = Column(Text, nullable=False, default="")
 
+    requires_review = Column(Boolean, nullable=False, default=False)
+    review_notes = Column(JSON, nullable=False, default=list)
+
     policy = relationship("PolicyRecord", back_populates="rules")
 
 
