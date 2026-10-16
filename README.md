@@ -1,4 +1,4 @@
-# Decision API
+# Policy Flow
 
 A policy-driven API that converts business requests into structured, explainable decisions and approval requirements.
 
@@ -192,24 +192,37 @@ The policy engine then evaluates incoming requests against these rules.
 
 # Policy PDF Upload
 
-The API supports uploading a company policy PDF.
+The API accepts and stores a company policy PDF, then processes it in a background task. Upload requests return a job ID as soon as the file is safely stored.
 
 ```http
 POST /v1/policies/upload
 ```
 
-The current policy pipeline is:
+Use the returned job ID to check processing status or retry a failed extraction:
+
+```http
+GET  /v1/policies/uploads/{job_id}
+POST /v1/policies/uploads/{job_id}/retry
+```
+
+The upload response includes `job_id`, `filename`, and `status`. Status is `queued`, `processing`, `completed`, or `failed`; completed jobs include extracted rules, and failed jobs include an error message.
+
+Uploaded PDFs and job status are stored under `app/data/policy_uploads` by default. Set `POLICY_UPLOAD_DIR` to use another persistent directory.
+
+The policy pipeline runs after the upload request returns:
 
 ```text
 Company Policy PDF
         ↓
+Safely Stored + Job ID Returned
+        ↓
 PDF Text Extraction
         ↓
-Policy Parser
+Policy Parser + LLM Extraction
         ↓
 Structured Policy Rules
         ↓
-Policy Store
+Database + Policy Store
         ↓
 Decision Engine
 ```
@@ -224,8 +237,18 @@ The API can currently extract policy text and identify supported policy rules su
 | ------ | --------------------- | ------------------------------------- |
 | GET    | `/health`             | Health check                          |
 | POST   | `/v1/gmail/decide`    | Evaluate an email/request             |
-| POST   | `/v1/policies/upload` | Upload and parse a policy PDF         |
-| GET    | `/docs`               | Interactive Swagger API documentation |
+| POST   | `/v1/policies/upload` | Store a PDF and start background processing |
+| GET    | `/v1/policies/uploads/{job_id}` | Read upload and processing status |
+| POST   | `/v1/policies/uploads/{job_id}/retry` | Retry failed policy processing |
+| GET    | `/v1/policies/groups` | List the signed-in user's policy groups |
+| GET    | `/v1/policies/groups/{policy_group_id}/versions` | List policy versions and validation results |
+| POST   | `/v1/policies/groups/{policy_group_id}/versions/{version_id}/activate` | Validate and activate a draft |
+| POST   | `/v1/policies/groups/{policy_group_id}/versions/{version_id}/rollback` | Restore an older validated version |
+| POST   | `/v1/gmail/decide` | Evaluate and durably audit a decision for the signed-in user |
+| GET    | `/v1/decisions` | Query the signed-in user's decision audit ledger |
+| GET    | `/docs`               | Interactive Swagger API documentation          |
+
+All policy, decision, and audit routes require a valid Clerk bearer session token. Data is isolated to a private workspace derived from the verified Clerk user ID; Clerk organizations and organization roles are not required. Uploaded policies remain drafts until explicitly activated; a processing completion is not an activation.
 
 ---
 
@@ -264,7 +287,35 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-## 4. Start the API
+## 4. Configure authentication and database migrations
+
+Policy and decision endpoints require a signed-in Clerk session. Configure the frontend publishable key in `Frontend/.env.local`:
+
+```dotenv
+NEXT_PUBLIC_API_URL=http://localhost:8000
+NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_...
+```
+
+Configure the API in the repository-root `.env` alongside `DATABASE_URL`:
+
+```dotenv
+CLERK_JWKS_URL=https://<your-clerk-domain>/.well-known/jwks.json
+CLERK_ISSUER=https://<your-clerk-domain>
+FRONTEND_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
+```
+
+Use the exact JWKS URL and issuer shown for your Clerk application. `CLERK_AUDIENCE` is optional. Do not commit real keys or database credentials. Clerk organizations and organization-role configuration are not used.
+
+Before starting the updated API, review the configured `DATABASE_URL` and take a database backup, then run the additive schema migration from the backend directory:
+
+```bash
+cd "Backend "
+python -m alembic upgrade head
+```
+
+The migration adds the tables used for account workspaces, policy groups and versions, activation events, and decision audit records. Existing policy rows are preserved and backfilled as non-active legacy drafts. The current schema keeps a legacy tenant table internally, but each signed-in Clerk user receives a private workspace; Clerk organization claims are not required. Do not run the migration against a production database until its target and backup have been verified.
+
+## 5. Start the API
 
 ```bash
 uvicorn app.main:app --reload
